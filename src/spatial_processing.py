@@ -40,14 +40,20 @@ def find_worldclim_dir():
     raise FileNotFoundError(f"Could not find worldclim directory in {candidates}")
 
 def find_states_boundary_file():
-    candidates = [
-        os.path.join("downloaded dataset", "tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson"),
-        os.path.join("tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson")
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-    raise FileNotFoundError(f"Could not find scl_states_2001.geojson in {candidates}")
+    # Force the app to look in the tracked processed folder
+    return "data\processed\scl_states_2001.geojson"
+# def find_states_boundary_file():
+
+    
+
+#     candidates = [
+#         os.path.join("downloaded dataset", "tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson"),
+#         os.path.join("tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson")
+#     ]
+#     for c in candidates:
+#         if os.path.exists(c):
+#             return c
+#     raise FileNotFoundError(f"Could not find scl_states_2001.geojson in {candidates}")
 
 def get_india_boundary():
     """
