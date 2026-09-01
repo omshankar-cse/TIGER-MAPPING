@@ -1,20 +1,24 @@
 import os
 import glob
+import logging
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 from PIL import Image
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 from shapely.prepared import prep
 import yaml
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # Load config
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 INDIA_BOUNDS = [68.0, 6.0, 98.0, 38.0]  # min_lon, min_lat, max_lon, max_lat
-CLIMATE_PROCESSED_DIR = os.path.join("data", "processed", "climate")
+CLIMATE_PROCESSED_DIR = "data/processed/climate"
 os.makedirs(CLIMATE_PROCESSED_DIR, exist_ok=True)
 
 # Grid parameters for WorldClim 2.5m global rasters (4320 rows x 8640 cols)
@@ -30,46 +34,94 @@ _INDIA_BOUNDARY = None
 
 def find_worldclim_dir():
     candidates = [
-        os.path.join("downloaded dataset", "worlclim"),
-        "worlclim",
-        os.path.join("data", "raw", "worlclim")
+        "data/raw/worlclim",
+        "data/processed/climate",
+        "worlclim"
     ]
     for c in candidates:
         if os.path.exists(c):
             return c
-    raise FileNotFoundError(f"Could not find worldclim directory in {candidates}")
+    return None
+
+def create_fallback_india_boundary():
+    """
+    Creates a basic polygon representing India's bounding box [68.0, 6.0, 98.0, 38.0].
+    """
+    return box(INDIA_BOUNDS[0], INDIA_BOUNDS[1], INDIA_BOUNDS[2], INDIA_BOUNDS[3])
+
+def create_fallback_india_geojson(file_path="data/processed/india_bounds.geojson"):
+    """
+    Generates and saves a minimal fallback GeoJSON for India if no boundary file exists.
+    """
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        fallback_geom = create_fallback_india_boundary()
+        gdf = gpd.GeoDataFrame(
+            [{"name": "India", "country": "India", "iso2": "IN", "geometry": fallback_geom}],
+            crs="EPSG:4326"
+        )
+        gdf.to_file(file_path, driver="GeoJSON")
+        logger.info(f"Created fallback India boundary GeoJSON at {file_path}")
+        return file_path
+    except Exception as e:
+        logger.warning(f"Could not write fallback GeoJSON to {file_path}: {e}")
+        return None
 
 def find_states_boundary_file():
-    # Force the app to look in the tracked processed folder
-    return "data\processed\scl_states_2001.geojson"
-# def find_states_boundary_file():
-
-    
-
-#     candidates = [
-#         os.path.join("downloaded dataset", "tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson"),
-#         os.path.join("tiger dataset - Copy", "tiger_in_2001", "scl_states_2001.geojson")
-#     ]
-#     for c in candidates:
-#         if os.path.exists(c):
-#             return c
-#     raise FileNotFoundError(f"Could not find scl_states_2001.geojson in {candidates}")
+    """
+    Locates the most lightweight available boundary GeoJSON file.
+    """
+    candidates = [
+        "data/processed/india_bounds.geojson",
+        "data/processed/states_simple.geojson",
+        "data/processed/scl_states_2001.geojson"
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return None
 
 def get_india_boundary():
     """
-    Load the state boundaries for India and merge them into a single polygon.
+    Load the boundary polygon for India.
+    Falls back gracefully to simplified geometry or bounding box if files are missing or unparseable.
     """
     global _INDIA_BOUNDARY
     if _INDIA_BOUNDARY is not None:
         return _INDIA_BOUNDARY
-        
+
     states_path = find_states_boundary_file()
-    df_states = gpd.read_file(states_path)
-    india_states = df_states[(df_states['country'] == 'India') | (df_states['iso2'] == 'IN')]
-    if india_states.empty:
-        raise ValueError("No India boundary features found in state file.")
-        
-    _INDIA_BOUNDARY = unary_union(india_states.geometry)
+    
+    if states_path is not None:
+        try:
+            df_states = gpd.read_file(states_path)
+            if "country" in df_states.columns or "iso2" in df_states.columns:
+                india_states = df_states[
+                    (df_states.get("country") == "India") | 
+                    (df_states.get("iso2") == "IN")
+                ]
+                if not india_states.empty:
+                    df_states = india_states
+
+            if not df_states.empty and hasattr(df_states, "geometry"):
+                if hasattr(df_states, "union_all"):
+                    _INDIA_BOUNDARY = df_states.union_all()
+                else:
+                    _INDIA_BOUNDARY = unary_union(df_states.geometry)
+                
+                if _INDIA_BOUNDARY is not None and not _INDIA_BOUNDARY.is_empty:
+                    return _INDIA_BOUNDARY
+        except Exception as e:
+            logger.warning(f"Failed to read boundary file {states_path} ({e}). Falling back to bounding box geometry.")
+
+    # Fallback if file missing or reading failed
+    logger.warning("Using fallback bounding box polygon for India boundary.")
+    _INDIA_BOUNDARY = create_fallback_india_boundary()
+    
+    # Try generating a fallback geojson file if missing
+    if not os.path.exists("data/processed/india_bounds.geojson"):
+        create_fallback_india_geojson("data/processed/india_bounds.geojson")
+
     return _INDIA_BOUNDARY
 
 def read_geotiff_crop(file_path):
@@ -112,6 +164,10 @@ def compute_and_cache_climate_for_year(year):
     decade_dir_name = "2000-2009" if effective_year <= 2009 else "2010-2019"
     
     worldclim_root = find_worldclim_dir()
+    if worldclim_root is None or not os.path.exists(worldclim_root):
+        raise FileNotFoundError(
+            f"Precomputed climate stack not found at {npz_path} and raw WorldClim directory is unavailable."
+        )
     decade_dir = os.path.join(worldclim_root, decade_dir_name)
     
     # Locate folders
