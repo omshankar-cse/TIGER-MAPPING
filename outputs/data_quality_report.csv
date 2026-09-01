@@ -1,0 +1,28 @@
+metric,value
+total_records,13116
+missing_values,0
+duplicate_records,0
+unique_coordinate_points,13111
+unique_years,20
+class_balance_presence,33.33%
+class_balance_absence,66.67%
+latitude_extent,8.1835 to 35.4509
+longitude_extent,68.2669 to 97.2325
+Precipitation_min,32.2000
+Precipitation_max,7953.2998
+Precipitation_mean,1205.1579
+Bio_Mean_Temp_min,-12.3750
+Bio_Mean_Temp_max,30.3750
+Bio_Mean_Temp_mean,23.9763
+Bio_Temp_Range_min,6.3333
+Bio_Temp_Range_max,17.5000
+Bio_Temp_Range_mean,11.6763
+Bio_Temp_Seasonality_min,57.1305
+Bio_Temp_Seasonality_max,1086.3660
+Bio_Temp_Seasonality_mean,448.8087
+Bio_Precip_Seasonality_min,32.5807
+Bio_Precip_Seasonality_max,264.0946
+Bio_Precip_Seasonality_mean,124.7696
+Bio_Precip_Log_min,3.5025
+Bio_Precip_Log_max,8.9815
+Bio_Precip_Log_mean,6.8872

@@ -1,0 +1,50 @@
+training:
+  start_year: 2001
+  end_year: 2015
+
+testing:
+  start_year: 2016
+  end_year: 2020
+
+prediction:
+  start_year: 2020
+  end_year: 2050
+
+presence_sampling:
+  points_per_year: 200
+  min_distance_km: 2
+
+spatial_thinning:
+  enabled: true
+  distance_km: 3
+
+pseudo_absence:
+  strategy: accessible_area  # Options: random, accessible_area, buffered_m
+  ratio: 2                  # Ratio of pseudo-absences to presences (1:2)
+  minimum_distance_km: 20   # Exclude pseudo-absences within 20km of any presence coordinate
+
+spatial_grid:
+  resolution: 0.1           # Resolution of India grid for prediction (decimal degrees)
+  validation_block_size: 2.0 # Size of block cross-validation cells (decimal degrees)
+
+model:
+  random_state: 42
+
+features:
+  raw:
+    - Precipitation
+    - Bio_Mean_Temp
+    - Bio_Temp_Range
+    - Bio_Temp_Seasonality
+    - Bio_Precip_Seasonality
+  engineered:
+    - Bio_Precip_Log
+
+hyperparameter_tuning:
+  enabled: true
+  cv_splits: 5
+  n_iter: 25
+
+habitat_classification:
+  low_threshold: 0.3
+  high_threshold: 0.6

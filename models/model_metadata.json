@@ -1,0 +1,17 @@
+{
+    "training_period": "2001-2015",
+    "test_period": "2016-2020",
+    "features": [
+        "Precipitation",
+        "Bio_Mean_Temp",
+        "Bio_Temp_Range",
+        "Bio_Temp_Seasonality",
+        "Bio_Precip_Seasonality",
+        "Bio_Precip_Log"
+    ],
+    "model_type": "HistGradientBoosting",
+    "threshold": 0.31,
+    "random_state": 42,
+    "cv_roc_auc": 0.9188210563307134,
+    "cv_accuracy": 0.8521211782703988
+}

@@ -1,0 +1,18 @@
+# Ignore virtual environments
+venv/
+vebnv/
+
+# Ignore major big data folders
+downloaded dataset/
+
+# Ignore raw data (but keep processed data if it's small and needed for the app)
+data/raw/
+
+# Ignore Python cache and OS files
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+
+# Ignore local Streamlit configurations
+.streamlit/

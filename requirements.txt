@@ -1,0 +1,17 @@
+streamlit
+pandas
+numpy
+scikit-learn
+xgboost
+geopandas
+shapely
+rasterio
+matplotlib
+plotly
+folium
+streamlit-folium
+pydeck
+joblib
+pyyaml
+scipy
+openpyxl
