@@ -37,6 +37,8 @@ features:
     - Bio_Temp_Range
     - Bio_Temp_Seasonality
     - Bio_Precip_Seasonality
+    - Elevation
+    - NDVI
   engineered:
     - Bio_Precip_Log
 

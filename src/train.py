@@ -3,9 +3,13 @@ import json
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import RandomizedSearchCV, GroupKFold
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, brier_score_loss, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score, f1_score, roc_auc_score, brier_score_loss,
+    precision_score, recall_score, balanced_accuracy_score
+)
 import joblib
 import yaml
 
@@ -24,11 +28,18 @@ from src.feature_engineering import (
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-# Import XGBoost if available
+# Import LightGBM (with fallback to HistGradientBoosting if DLL loading blocked)
+try:
+    import lightgbm as lgb
+    HAS_LGB = True
+except (ImportError, OSError, Exception):
+    HAS_LGB = False
+
+# Import XGBoost
 try:
     import xgboost as xgb
     HAS_XGB = True
-except ImportError:
+except (ImportError, OSError, Exception):
     HAS_XGB = False
 
 def create_spatial_groups(df, block_size=None):
@@ -59,6 +70,45 @@ def run_hyperparameter_tuning(X, y, groups, model_type="rf"):
             "min_samples_split": [2, 4, 8],
             "min_samples_leaf": [1, 2, 4],
             "max_features": ["sqrt", "log2", 0.7]
+        }
+    elif model_type == "lgb" and HAS_LGB:
+        clf = lgb.LGBMClassifier(
+            random_state=random_state,
+            class_weight='balanced',
+            verbose=-1,
+            n_jobs=-1
+        )
+        param_dist = {
+            "n_estimators": [100, 150, 200, 300],
+            "num_leaves": [15, 31, 63, 127],
+            "max_depth": [4, 6, 8, 12, -1],
+            "learning_rate": [0.01, 0.03, 0.05, 0.1],
+            "subsample": [0.7, 0.85, 1.0],
+            "colsample_bytree": [0.7, 0.85, 1.0],
+            "reg_alpha": [0.0, 0.01, 0.1, 1.0],
+            "reg_lambda": [0.0, 0.01, 0.1, 1.0],
+            "min_child_samples": [10, 20, 40]
+        }
+    elif model_type in ["ann", "mlp"]:
+        clf = MLPClassifier(
+            random_state=random_state,
+            max_iter=500,
+            early_stopping=True,
+            validation_fraction=0.1,
+            n_iter_no_change=15
+        )
+        param_dist = {
+            "hidden_layer_sizes": [
+                (64, 32),
+                (128, 64),
+                (128, 64, 32),
+                (64, 64),
+                (128, 128)
+            ],
+            "activation": ["relu", "tanh"],
+            "alpha": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
+            "learning_rate_init": [0.001, 0.005, 0.01],
+            "batch_size": [32, 64, 128]
         }
     elif model_type == "hgb":
         clf = HistGradientBoostingClassifier(random_state=random_state, class_weight='balanced')
@@ -168,25 +218,35 @@ def main():
     print("=== STARTING TIGER HABITAT RE-ARCHITECTED TRAINING PIPELINE ===")
     print("==========================================================")
     
-    # 1. Stratified Presence Data
-    occurrences_df = clean_tiger_occurrence_data()
-    
-    # 2. Pseudo-Absence Generation
-    dataset_raw = create_model_dataset(occurrences_df)
-    
-    # 3. Bioclimatic Feature Extraction
-    dataset_features = extract_climate_features_for_dataset(dataset_raw)
-    
-    # 4. Feature Engineering
-    print("\n--- Step 4: Computing Engineered Features ---")
-    dataset_engineered = compute_engineered_features(dataset_features)
-    
-    # Save full processed dataset
-    os.makedirs(os.path.join("data", "processed"), exist_ok=True)
-    dataset_engineered.to_csv(os.path.join("data", "processed", "model_dataset_processed.csv"), index=False)
-    
-    # Feature columns
+    processed_csv = os.path.join("data", "processed", "model_dataset_processed.csv")
     feature_cols = config['features']['raw'] + config['features']['engineered']
+    
+    if os.path.exists(processed_csv):
+        print(f"\n--- Loading Processed Dataset from {processed_csv} ---")
+        dataset_engineered = pd.read_csv(processed_csv)
+        # Ensure all feature columns exist
+        missing = [col for col in feature_cols if col not in dataset_engineered.columns]
+        if missing:
+            print(f"Missing features {missing}, recomputing engineered features...")
+            dataset_engineered = compute_engineered_features(dataset_engineered)
+            dataset_engineered.to_csv(processed_csv, index=False)
+    else:
+        # 1. Stratified Presence Data
+        occurrences_df = clean_tiger_occurrence_data()
+        
+        # 2. Pseudo-Absence Generation
+        dataset_raw = create_model_dataset(occurrences_df)
+        
+        # 3. Bioclimatic Feature Extraction
+        dataset_features = extract_climate_features_for_dataset(dataset_raw)
+        
+        # 4. Feature Engineering
+        print("\n--- Step 4: Computing Engineered Features ---")
+        dataset_engineered = compute_engineered_features(dataset_features)
+        
+        # Save full processed dataset
+        os.makedirs(os.path.join("data", "processed"), exist_ok=True)
+        dataset_engineered.to_csv(processed_csv, index=False)
     
     # 5. Multicollinearity VIF Diagnostic
     print("\n--- Multicollinearity Diagnostic (VIF) ---")
@@ -217,11 +277,19 @@ def main():
     
     # 8. Model Selection, Spatial CV & Hyperparameter Tuning
     models_to_test = {
-        "rf": "Random Forest",
-        "hgb": "HistGradientBoosting"
+        "rf": "Random Forest (Baseline)"
     }
+    if HAS_LGB:
+        models_to_test["lgb"] = "LightGBM (Gradient Boosting)"
+    else:
+        models_to_test["hgb"] = "HistGradientBoosting"
+        
+    models_to_test["mlp"] = "Artificial Neural Network (MLP)"
+    
     if HAS_XGB:
         models_to_test["xgb"] = "XGBoost"
+    elif "hgb" not in models_to_test:
+        models_to_test["hgb"] = "HistGradientBoosting"
         
     estimators = {}
     calibrated_models = {}

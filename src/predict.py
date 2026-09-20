@@ -22,18 +22,25 @@ SCENARIOS = {
 
 def load_baseline_climate_grid(df_grid):
     """
-    Extracts baseline bioclimatic values (from year 2019) for all grid coordinates.
+    Extracts baseline bioclimatic values (from year 2019) and GEE features for all grid coordinates.
     """
     df_out = df_grid.copy()
     points = list(zip(df_out["longitude"], df_out["latitude"]))
     raw_vars = config['features']['raw']
+    climate_vars = [v for v in raw_vars if v not in ["Elevation", "NDVI"]]
     
     print("Extracting baseline (2019) bioclimatic layers for India prediction grid...")
-    for var in raw_vars:
+    for var in climate_vars:
         vals = get_climate_value_at_points(points, 2019, var)
         df_out[var] = vals
         if df_out[var].isnull().any():
             df_out[var] = df_out[var].fillna(df_out[var].median())
+            
+    if any(v in raw_vars for v in ["Elevation", "NDVI"]):
+        missing_gee = [v for v in ["Elevation", "NDVI"] if v in raw_vars and (v not in df_out.columns or df_out[v].isnull().all())]
+        if missing_gee:
+            from src.fetch_gee_features import fetch_gee_features_for_points
+            df_out = fetch_gee_features_for_points(df_out)
             
     return df_out
 

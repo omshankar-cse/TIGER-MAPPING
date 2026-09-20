@@ -93,6 +93,7 @@ def get_india_boundary():
     states_path = find_states_boundary_file()
     
     if states_path is not None:
+        # Attempt 1: GeoPandas read_file
         try:
             df_states = gpd.read_file(states_path)
             if "country" in df_states.columns or "iso2" in df_states.columns:
@@ -112,7 +113,28 @@ def get_india_boundary():
                 if _INDIA_BOUNDARY is not None and not _INDIA_BOUNDARY.is_empty:
                     return _INDIA_BOUNDARY
         except Exception as e:
-            logger.warning(f"Failed to read boundary file {states_path} ({e}). Falling back to bounding box geometry.")
+            logger.info(f"GeoPandas read failed ({e}), attempting standard JSON parser...")
+
+        # Attempt 2: Pure JSON + Shapely shape parser (zero GDAL/pyogrio dependency)
+        try:
+            import json
+            from shapely.geometry import shape
+            with open(states_path, "r", encoding="utf-8") as f:
+                geo_data = json.load(f)
+            features = geo_data.get("features", [])
+            geoms = []
+            for feat in features:
+                props = feat.get("properties", {})
+                if not props or props.get("country") == "India" or props.get("iso2") == "IN" or "India" in str(props):
+                    geoms.append(shape(feat["geometry"]))
+            if not geoms and features:
+                geoms = [shape(feat["geometry"]) for feat in features]
+            if geoms:
+                _INDIA_BOUNDARY = unary_union(geoms)
+                if _INDIA_BOUNDARY is not None and not _INDIA_BOUNDARY.is_empty:
+                    return _INDIA_BOUNDARY
+        except Exception as e2:
+            logger.warning(f"Standard JSON parse also failed ({e2}). Falling back to bounding box.")
 
     # Fallback if file missing or reading failed
     logger.warning("Using fallback bounding box polygon for India boundary.")

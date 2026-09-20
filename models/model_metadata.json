@@ -7,11 +7,13 @@
         "Bio_Temp_Range",
         "Bio_Temp_Seasonality",
         "Bio_Precip_Seasonality",
+        "Elevation",
+        "NDVI",
         "Bio_Precip_Log"
     ],
     "model_type": "HistGradientBoosting",
-    "threshold": 0.31,
+    "threshold": 0.24000000000000002,
     "random_state": 42,
-    "cv_roc_auc": 0.9188210563307134,
-    "cv_accuracy": 0.8521211782703988
+    "cv_roc_auc": 0.9488949762591709,
+    "cv_accuracy": 0.8820581189636009
 }

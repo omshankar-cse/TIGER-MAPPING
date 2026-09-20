@@ -51,9 +51,16 @@ def clean_tiger_occurrence_data():
     Extracts stratified presence coordinates across all years, cleans,
     validates boundaries, removes duplicates, and applies spatial thinning.
     """
-    print("--- Extracting and Cleaning Stratified Presence Data ---")
+    out_csv = os.path.join(PROCESSED_DIR, "tiger_occurrences_clean.csv")
     df_raw = load_and_sample_presence_data()
     
+    if df_raw.empty or "latitude" not in df_raw.columns or len(df_raw) == 0:
+        if os.path.exists(out_csv):
+            print(f"Loading cached cleaned occurrences from {out_csv}...")
+            return pd.read_csv(out_csv)
+        else:
+            raise ValueError("No raw presence data found and no cached tiger_occurrences_clean.csv exists.")
+            
     # 1. Missing coordinate removal
     df_clean = df_raw.dropna(subset=["latitude", "longitude"]).copy()
     

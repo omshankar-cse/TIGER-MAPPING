@@ -1,26 +1,17 @@
 import os
 from pathlib import Path
 
-# Directories to ignore
+# Directories to ignore by their folder name (ignores anywhere in the project)
 IGNORED_DIRS = {
-    '.git',
-    '.github',
-    'venv',
-    'env',
-    '.venv',
-    '.env',
-    '__pycache__',
-    'node_modules',
-    '.idea',
-    '.vscode',
-    'dist',
-    'build',
-    '.pytest_cache',
-    '.mypy_cache',
-    'target',
-    'bin',
-    'obj',
+    '.git', '.github', 'vebnv', 'env', '.venv', '.env', '__pycache__',
+    'node_modules', '.idea', '.vscode', 'dist', 'build', '.pytest_cache',
+    '.mypy_cache', 'target', 'bin', 'obj','venv'
 }
+
+# Specific absolute or relative paths to ignore
+IGNORED_PATHS = [
+    r"D:\SIS INTERNSHIP\TIGER PROJECT\TIGER TO MOVE\outputs\predictions"
+]
 
 # Supported source/text extensions
 ALLOWED_EXTENSIONS = {
@@ -31,7 +22,7 @@ ALLOWED_EXTENSIONS = {
     # Data & Config formats
     '.json', '.yaml', '.yml', '.toml', '.xml', '.ini', '.cfg', '.conf', '.env.example',
     # Documentation & Text
-    '.md', '.txt', '.rst', '.csv',  # Note: text files
+    '.md', '.txt', '.rst', '.csv',  
     # Backend / System languages
     '.java', '.c', '.cpp', '.h', '.hpp', '.cs', '.go', '.rs', '.php', '.rb', '.sh', '.bat', '.ps1', '.sql',
 }
@@ -49,7 +40,7 @@ EXCLUDED_EXTENSIONS = {
 }
 
 # Output file name and script name to exclude from the dump
-OUTPUT_FILE = 'project_code_dump.txt'
+OUTPUT_FILE = 'project_code_dump_v3.txt'
 SCRIPT_FILE = 'consolidate.py'
 
 
@@ -60,11 +51,9 @@ def is_text_file(filepath: Path) -> bool:
     if ext in EXCLUDED_EXTENSIONS:
         return False
     
-    # If it's explicitly in allowed extensions, include it
     if ext in ALLOWED_EXTENSIONS:
         return True
     
-    # Check known dotfiles without suffix (e.g., .gitignore, Dockerfile, Makefile)
     special_names = {'dockerfile', 'makefile', 'license', 'readme', '.gitignore', '.dockerignore'}
     if filepath.name.lower() in special_names:
         return True
@@ -76,6 +65,17 @@ def consolidate_code(root_dir: str = '.'):
     root_path = Path(root_dir).resolve()
     output_path = root_path / OUTPUT_FILE
     
+    # Resolve all specific ignore paths to their absolute forms for accurate comparison
+    resolved_ignored_paths = [Path(p).resolve() for p in IGNORED_PATHS]
+    
+    # Delete the old file to guarantee a fresh start
+    if output_path.exists():
+        try:
+            output_path.unlink()
+            print(f"Deleted old dump file: {OUTPUT_FILE}")
+        except Exception as e:
+            print(f"[WARNING] Could not delete old file. It might be open in another program: {e}")
+            
     print(f"Traversing directory: {root_path}")
     print(f"Output will be written to: {output_path}")
 
@@ -83,24 +83,42 @@ def consolidate_code(root_dir: str = '.'):
     files_skipped = 0
 
     with open(output_path, 'w', encoding='utf-8', errors='replace') as outfile:
-        # Write summary header
         outfile.write("=" * 80 + "\n")
         outfile.write(f"PROJECT CODE CONSOLIDATION DUMP\n")
         outfile.write(f"Root: {root_path.name}\n")
         outfile.write("=" * 80 + "\n\n")
 
         for dirpath, dirnames, filenames in os.walk(root_path):
-            # Prune ignored directories in-place
-            dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRS and not d.startswith('.git')]
+            current_dir = Path(dirpath).resolve()
+            
+            # Prune directories we want to ignore so os.walk doesn't even search them
+            valid_dirs = []
+            for d in dirnames:
+                # 1. Ignore by folder name
+                if d in IGNORED_DIRS or d.startswith('.git'):
+                    continue
+                
+                # 2. Ignore by specific exact path
+                dir_full_path = (current_dir / d).resolve()
+                skip_this_dir = False
+                for ig_path in resolved_ignored_paths:
+                    # If this directory is the ignored path (or inside it), skip it
+                    if str(dir_full_path).startswith(str(ig_path)):
+                        skip_this_dir = True
+                        break
+                
+                if not skip_this_dir:
+                    valid_dirs.append(d)
+
+            # Update dirnames in-place to control os.walk behavior
+            dirnames[:] = valid_dirs
 
             for filename in filenames:
-                # Exclude output file and this script itself
                 if filename in (OUTPUT_FILE, SCRIPT_FILE):
                     continue
 
                 file_path = Path(dirpath) / filename
                 
-                # Check if file matches our code criteria
                 if not is_text_file(file_path):
                     files_skipped += 1
                     continue
@@ -114,7 +132,6 @@ def consolidate_code(root_dir: str = '.'):
                     with open(file_path, 'r', encoding='utf-8', errors='replace') as infile:
                         content = infile.read()
 
-                    # Write file header and content
                     separator = f"\n{'=' * 80}\n--- File: {rel_path} ---\n{'=' * 80}\n"
                     outfile.write(separator)
                     outfile.write(content)

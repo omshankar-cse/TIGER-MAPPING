@@ -15,3 +15,5 @@ joblib
 pyyaml
 scipy
 openpyxl
+lightgbm
+earthengine-api
